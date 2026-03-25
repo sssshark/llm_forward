@@ -33,13 +33,14 @@ pip install -r requirements.txt
 
 ### 2. 配置上游 API
 
-编辑 `app/main.py` 文件，修改上游 API 配置：
+可通过环境变量配置：
 
-```python
-# 修改以下两行配置
-LLM_API_BASE = "https://dashscope.aliyuncs.com/compatible-mode/v1"  # 上游 API 地址
-LLM_API_KEY = "your_api_key_here"  # API 密钥
+```bash
+export LLM_FORWARD_API_BASE="https://ark.cn-beijing.volces.com/api/coding/v3"
+export LLM_FORWARD_API_KEY="your_api_key_here"
 ```
+
+或直接编辑 `app/main.py` 文件，修改默认配置值。
 
 ### 3. 启动服务
 
@@ -131,7 +132,7 @@ curl -X POST POST http://localhost:8000/v1/chat/completions \
 
 ## 日志文件
 
-- `logs/proxy.log`: 服务运行日志，包含所有请求和错误信息
+- `logs/llm_forward.log`: 服务运行日志，包含所有请求和错误信息
 - `logs/token_usage.jsonl`: Token 使用统计，每行一条 JSON 记录
 
 ## 使用示例
@@ -165,12 +166,12 @@ curl http://localhost:8000/token-stats
 
 ## 配置说明
 
-在 `app/main.py` 中直接配置以下变量：
+优先使用环境变量配置，也可在 `app/main.py` 中修改默认值。支持以下环境变量：
 
 | 变量名 | 说明 | 示例 |
 |--------|------|------|
-| OPENCLAW_API_BASE | 上游 API 地址 | https://dashscope.aliyuncs.com/compatible-mode/v1 |
-| OPENCLAW_API_KEY | API 密钥 | sk-xxxxx |
+| LLM_FORWARD_API_BASE | 上游 API 地址 | https://ark.cn-beijing.volces.com/api/coding/v3 |
+| LLM_FORWARD_API_KEY | API 密钥 | sk-xxxxx |
 
 ### 启动脚本配置（可选）
 
@@ -183,7 +184,7 @@ curl http://localhost:8000/token-stats
 
 ## 注意事项
 
-1. 确保 `app/main.py` 中的 API 地址和密钥正确配置
+1. 确保环境变量 `LLM_FORWARD_API_BASE` 和 `LLM_FORWARD_API_KEY` 已正确配置
 2. 服务需要有访问上游 API 的网络权限
 3. 日志文件会持续增长，建议定期清理或归档
 4. 生产环境建议使用进程管理工具（如 systemd、supervisor）
@@ -194,13 +195,13 @@ curl http://localhost:8000/token-stats
 
 - 检查 Python 依赖是否已安装：`pip install -r requirements.txt`
 - 确认端口 8000 未被占用
-- 查看日志文件 `logs/proxy.log` 了解详细错误信息
+- 查看日志文件 `logs/llm_forward.log` 了解详细错误信息
 
 ### 请求转发失败
 
 - 确认上游 API 密钥有效
 - 检查网络连接是否正常
-- 查看 `logs/proxy.log` 中的错误信息
+- 查看 `logs/llm_forward.log` 中的错误信息
 
 ### Token 统计不准确
 
