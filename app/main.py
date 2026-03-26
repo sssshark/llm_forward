@@ -85,6 +85,8 @@ async def forward_request_stream(request_data: Dict[str, Any], url, headers) -> 
                                 data = json.loads(item)
                                 if "usage" in data and data["usage"] is not None:
                                     await log_token_usage(data)
+                                else:
+                                    logger.error(f"大模型没有返回usage字段")
                             except json.JSONDecodeError as e:
                                 logger.warning(f"JSON 解析失败: {e}, 原始内容: {item}")
 
