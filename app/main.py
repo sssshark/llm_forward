@@ -197,6 +197,16 @@ async def get_token_stats():
     }
 
 
+@app.delete("/token-stats")
+async def clear_token_stats():
+    """清空 token 使用统计"""
+    if token_usage_log.exists():
+        token_usage_log.unlink()
+        logger.info("Token 使用统计已清空")
+        return {"message": "Token 使用统计已清空"}
+    return {"message": "文件不存在，无需清空"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
