@@ -76,7 +76,8 @@ async def forward_request_stream(request_data: Dict[str, Any], url, headers) -> 
             async with client.stream('POST', url, json=request_data, headers=headers) as response:
                 # 如果响应状态码不是 2xx，记录错误详情
                 if not response.is_success:
-                    error_text = await response.atext()
+                    error_bytes = await response.aread()
+                    error_text = error_bytes.decode('utf-8')
                     logger.error(f"流式请求失败 - 状态码: {response.status_code}, 响应: {error_text}")
                     error_msg = f'data: {{"error": "API返回错误: {response.status_code} - {error_text}"}}\n\n'
                     yield error_msg.encode('utf-8')
