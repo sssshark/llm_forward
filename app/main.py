@@ -20,7 +20,7 @@ log_dir.mkdir(exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
     handlers=[
         logging.FileHandler(log_dir / 'llm_forward.log'),
         logging.StreamHandler()
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="llm forward Service")
 
 
-LLM_FORWARD_API_BASE = os.getenv("LLM_FORWARD_API_BASE", "https://ark.cn-beijing.volces.com/api/coding/v3")
+LLM_FORWARD_API_BASE = os.getenv("LLM_FORWARD_API_BASE", "https://coding.dashscope.aliyuncs.com/v1")
 LLM_FORWARD_API_KEY = os.getenv("LLM_FORWARD_API_KEY", "")
 
 
@@ -74,6 +74,14 @@ async def forward_request_stream(request_data: Dict[str, Any], url, headers) -> 
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
             async with client.stream('POST', url, json=request_data, headers=headers) as response:
+                # 如果响应状态码不是 2xx，记录错误详情
+                if not response.is_success:
+                    error_text = await response.atext()
+                    logger.error(f"流式请求失败 - 状态码: {response.status_code}, 响应: {error_text}")
+                    error_msg = f'data: {{"error": "API返回错误: {response.status_code} - {error_text}"}}\n\n'
+                    yield error_msg.encode('utf-8')
+                    return
+
                 response.raise_for_status()
 
                 async for chunk in response.aiter_bytes():
@@ -91,14 +99,17 @@ async def forward_request_stream(request_data: Dict[str, Any], url, headers) -> 
                                 logger.warning(f"JSON 解析失败: {e}, 原始内容: {item}")
 
                     yield chunk
+    except httpx.HTTPStatusError as e:
+        logger.error(f"流式请求HTTP错误 - 状态码: {e.response.status_code}, 响应: {e.response.text}")
+        error_msg = f'data: {{"error": "HTTP错误: {e.response.status_code} - {e.response.text[:200]}"}}\n\n'
+        yield error_msg.encode('utf-8')
     except httpx.HTTPError as e:
-        logger.error(f"请求转发失败: {e}")
-        # 流式响应中不能抛出 HTTPException，返回错误消息
-        error_msg = f'data: {{"error": "{str(e)}"}}\n\n'
+        logger.error(f"流式请求转发失败: {type(e).__name__}: {e}")
+        error_msg = f'data: {{"error": "请求失败: {type(e).__name__}: {str(e)}"}}\n\n'
         yield error_msg.encode('utf-8')
     except Exception as e:
-        logger.error(f"未知错误: {e}")
-        error_msg = f'data: {{"error": "{str(e)}"}}\n\n'
+        logger.exception(f"流式请求未知错误")
+        error_msg = f'data: {{"error": "未知错误: {type(e).__name__}: {str(e)}"}}\n\n'
         yield error_msg.encode('utf-8')
 
 
@@ -110,9 +121,15 @@ async def forward_request(request_data: Dict[str, Any], url, headers):
 
             logger.info(f"响应状态码: {response.status_code}")
             logger.info(f"响应 headers: {dict(response.headers)}")
-            logger.info(f"响应内容: {response.text[:500]}")
+            logger.info(f"响应内容: {response.text[:1000]}")
 
-            response.raise_for_status()
+            # 如果响应状态码不是 2xx，记录详细错误
+            if not response.is_success:
+                logger.error(f"API请求失败 - 状态码: {response.status_code}, 响应: {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"API错误: {response.status_code} - {response.text[:500]}"
+                )
 
             # 解析响应
             try:
@@ -127,9 +144,15 @@ async def forward_request(request_data: Dict[str, Any], url, headers):
                 await log_token_usage(response_data)
 
             return JSONResponse(content=response_data, status_code=response.status_code)
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP错误 - 状态码: {e.response.status_code}, 响应: {e.response.text}")
+        raise HTTPException(status_code=e.response.status_code, detail=f"API错误: {e.response.status_code} - {e.response.text[:500]}")
     except httpx.HTTPError as e:
-        logger.error(f"请求转发失败: {e}")
-        raise HTTPException(status_code=500, detail=f"请求转发失败: {str(e)}")
+        logger.error(f"请求转发失败: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"请求转发失败: {type(e).__name__}: {str(e)}")
+    except Exception as e:
+        logger.exception(f"未知错误")
+        raise HTTPException(status_code=500, detail=f"未知错误: {type(e).__name__}: {str(e)}")
 
 
 @app.post("/chat/completions")
